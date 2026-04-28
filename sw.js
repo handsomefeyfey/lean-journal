@@ -1,4 +1,4 @@
-const CACHE_NAME = "lean-journal-pwa-v3";
+const CACHE_NAME = "lean-journal-pwa-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -12,6 +12,8 @@ const APP_SHELL = [
   "./assets/icons/icon-maskable-512.png",
   "./assets/icons/apple-touch-icon.png",
 ];
+const APP_SHELL_URLS = APP_SHELL.map((path) => new URL(path, self.registration.scope).href);
+const OFFLINE_FALLBACK_URL = new URL("./index.html", self.registration.scope).href;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -38,32 +40,33 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", copy));
-          return response;
-        })
-        .catch(() => caches.match("./index.html")),
-    );
-    return;
-  }
-
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
-
-      return fetch(request).then((response) => {
+    fetch(request)
+      .then((response) => {
         if (response.ok) {
           const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          const cacheTarget =
+            request.mode === "navigate"
+              ? OFFLINE_FALLBACK_URL
+              : APP_SHELL_URLS.includes(request.url)
+                ? request.url
+                : request;
+          caches.open(CACHE_NAME).then((cache) => cache.put(cacheTarget, copy));
         }
         return response;
-      });
-    }),
+      })
+      .catch(async () => {
+        const cached = await caches.match(request);
+
+        if (cached) {
+          return cached;
+        }
+
+        if (request.mode === "navigate") {
+          return caches.match(OFFLINE_FALLBACK_URL);
+        }
+
+        throw new Error(`Network request failed for ${request.url}`);
+      }),
   );
 });
