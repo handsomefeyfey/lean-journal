@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>体重周报</title>
+    <meta name="theme-color" content="#f6f1e8" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="体重周报" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./assets/icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" href="./assets/icons/icon-192.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="ambient ambient-left"></div>
+      <div class="ambient ambient-right"></div>
+
+      <main class="app">
+        <section class="hero-card panel">
+          <div class="hero-copy">
+            <p class="eyebrow">Lean Journal</p>
+            <h1>每天记体重，每周看趋势。</h1>
+            <p class="hero-text">
+              记录每天的体重，自动计算周平均值，和上一周对比，并用曲线直观看到你的变化。
+            </p>
+            <div class="install-card">
+              <div>
+                <p class="install-title">手机使用</p>
+                <p id="install-hint" class="install-hint">
+                  安卓可直接安装到主屏幕；iPhone 请在 Safari 里点“分享”再选“添加到主屏幕”。
+                </p>
+              </div>
+              <button id="install-app-button" type="button" class="secondary-button" disabled>
+                安装到主屏幕
+              </button>
+            </div>
+          </div>
+
+          <form id="weight-form" class="entry-form">
+            <div class="field">
+              <label for="entry-date">日期</label>
+              <input id="entry-date" name="date" type="date" required />
+            </div>
+            <div class="field">
+              <label for="entry-weight">体重（kg）</label>
+              <input
+                id="entry-weight"
+                name="weight"
+                type="number"
+                min="20"
+                max="400"
+                step="0.1"
+                placeholder="例如 63.4"
+                required
+              />
+            </div>
+            <button type="submit" class="primary-button">保存记录</button>
+            <p id="form-hint" class="form-hint">
+              同一天再次保存会自动覆盖旧记录。
+            </p>
+
+            <div class="form-divider"></div>
+
+            <div class="settings-block">
+              <div class="settings-head">
+                <p class="settings-title">基础设置</p>
+                <p id="settings-hint" class="settings-note">
+                  身高和目标体重会自动保存在本地浏览器。
+                </p>
+              </div>
+              <div class="settings-grid">
+                <div class="field">
+                  <label for="height-cm">身高（cm）</label>
+                  <input
+                    id="height-cm"
+                    name="height"
+                    type="number"
+                    min="80"
+                    max="260"
+                    step="0.1"
+                    placeholder="例如 168"
+                  />
+                </div>
+                <div class="field">
+                  <label for="target-weight">目标体重（kg）</label>
+                  <input
+                    id="target-weight"
+                    name="targetWeight"
+                    type="number"
+                    min="20"
+                    max="400"
+                    step="0.1"
+                    placeholder="例如 58"
+                  />
+                </div>
+              </div>
+            </div>
+          </form>
+        </section>
+
+        <section class="stats-grid">
+          <article class="panel stat-card">
+            <p class="stat-label">最近体重</p>
+            <p id="latest-weight" class="stat-value">--</p>
+            <p id="latest-weight-meta" class="stat-meta">还没有记录</p>
+          </article>
+          <article class="panel stat-card">
+            <p class="stat-label">当前周平均</p>
+            <p id="current-week-average" class="stat-value">--</p>
+            <p id="current-week-meta" class="stat-meta">等待数据</p>
+          </article>
+          <article class="panel stat-card">
+            <p class="stat-label">较上一周变化</p>
+            <p id="week-change" class="stat-value">--</p>
+            <p id="week-change-meta" class="stat-meta">至少需要两周数据</p>
+          </article>
+          <article class="panel stat-card">
+            <p class="stat-label">累计变化</p>
+            <p id="overall-change" class="stat-value">--</p>
+            <p id="overall-change-meta" class="stat-meta">从首条记录开始计算</p>
+          </article>
+          <article class="panel stat-card">
+            <p class="stat-label">最新 BMI</p>
+            <p id="latest-bmi" class="stat-value">--</p>
+            <p id="latest-bmi-meta" class="stat-meta">填写身高后自动计算</p>
+          </article>
+          <article class="panel stat-card">
+            <p class="stat-label">距目标体重</p>
+            <p id="target-gap" class="stat-value">--</p>
+            <p id="target-gap-meta" class="stat-meta">填写目标体重后自动计算</p>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <article class="panel chart-panel">
+            <div class="section-head">
+              <div>
+                <p class="section-eyebrow">Trend</p>
+                <h2>体重曲线</h2>
+              </div>
+              <p id="chart-caption" class="section-caption">按日期展示每日体重变化</p>
+            </div>
+            <div class="chart-frame">
+              <div
+                id="trend-chart"
+                class="trend-chart"
+                aria-label="体重趋势图"
+                role="img"
+              ></div>
+              <div id="chart-empty" class="chart-empty">
+                添加第一条记录后，这里会出现你的体重曲线。
+              </div>
+            </div>
+          </article>
+
+          <article class="panel summary-panel">
+            <div class="section-head">
+              <div>
+                <p class="section-eyebrow">Weekly</p>
+                <h2>周平均</h2>
+              </div>
+              <p class="section-caption">每周自动汇总并和前一周比较</p>
+            </div>
+            <div id="weekly-summary-list" class="summary-list empty-state">
+              还没有周统计。
+            </div>
+          </article>
+
+          <article class="panel records-panel">
+            <div class="section-head">
+              <div>
+                <p class="section-eyebrow">Entries</p>
+                <h2>每日记录</h2>
+              </div>
+              <p class="section-caption">按日期排序，支持删除单条数据</p>
+            </div>
+            <div id="records-list" class="records-list empty-state">
+              还没有记录，先输入今天的体重。
+            </div>
+          </article>
+
+          <article class="panel sync-panel">
+            <div class="section-head">
+              <div>
+                <p class="section-eyebrow">Cloud</p>
+                <h2>多设备同步</h2>
+              </div>
+              <p class="section-caption">默认纯本地可用，启用后可在手机和电脑共享数据</p>
+            </div>
+
+            <form id="sync-form" class="sync-form">
+              <div class="settings-grid sync-grid">
+                <div class="field">
+                  <label for="supabase-url">Supabase URL</label>
+                  <input
+                    id="supabase-url"
+                    name="supabaseUrl"
+                    type="url"
+                    placeholder="https://xxxx.supabase.co"
+                    autocomplete="url"
+                  />
+                </div>
+                <div class="field">
+                  <label for="supabase-anon-key">Anon Key</label>
+                  <input
+                    id="supabase-anon-key"
+                    name="supabaseAnonKey"
+                    type="password"
+                    placeholder="从 Supabase 项目设置复制"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="field">
+                  <label for="supabase-email">登录邮箱</label>
+                  <input
+                    id="supabase-email"
+                    name="supabaseEmail"
+                    type="email"
+                    placeholder="你在 Supabase Auth 里使用的邮箱"
+                    autocomplete="username"
+                  />
+                </div>
+                <div class="field">
+                  <label for="supabase-password">登录密码</label>
+                  <input
+                    id="supabase-password"
+                    name="supabasePassword"
+                    type="password"
+                    placeholder="只用于本次登录，不会单独保存"
+                    autocomplete="current-password"
+                  />
+                </div>
+              </div>
+
+              <div class="sync-actions">
+                <button id="sync-connect-button" type="submit" class="primary-button">
+                  登录并同步
+                </button>
+                <button id="sync-pull-button" type="button" class="secondary-button">
+                  拉取云端
+                </button>
+                <button id="sync-push-button" type="button" class="secondary-button">
+                  推送本地
+                </button>
+                <button id="sync-signout-button" type="button" class="ghost-button">
+                  退出同步
+                </button>
+              </div>
+
+              <div class="sync-meta">
+                <p id="sync-status" class="sync-status">当前是纯本地模式。</p>
+                <p id="sync-note" class="sync-note">
+                  首次使用前，需要先按说明在 Supabase 中创建表和权限策略。
+                </p>
+              </div>
+            </form>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="./vendor/echarts.min.js"></script>
+    <script src="./vendor/supabase.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
