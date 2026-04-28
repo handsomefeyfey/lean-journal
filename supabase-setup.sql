@@ -23,6 +23,9 @@ execute function public.set_weight_journal_updated_at();
 
 alter table public.weight_journal_snapshots enable row level security;
 
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on table public.weight_journal_snapshots to authenticated;
+
 drop policy if exists "select own weight journal snapshot" on public.weight_journal_snapshots;
 create policy "select own weight journal snapshot"
 on public.weight_journal_snapshots
