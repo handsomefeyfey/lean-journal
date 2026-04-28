@@ -3,9 +3,10 @@ const SETTINGS_KEY = "lean-journal-settings-v1";
 const META_KEY = "lean-journal-meta-v1";
 const SYNC_CONFIG_KEY = "lean-journal-sync-config-v1";
 const SYNC_TABLE = "weight_journal_snapshots";
+// Publishable Supabase config is safe to ship and keeps recovery links working on any device.
 const DEFAULT_SYNC_CONFIG = Object.freeze({
-  supabaseUrl: "",
-  supabaseAnonKey: "",
+  supabaseUrl: "https://kovicgsdezkylimczijg.supabase.co",
+  supabaseAnonKey: "sb_publishable_Uj2OyeTZckG4rLFCOPOEJg_WK4Rtsvo",
   email: "",
 });
 
@@ -41,11 +42,15 @@ const elements = {
   syncAnonKeyInput: document.querySelector("#supabase-anon-key"),
   syncEmailInput: document.querySelector("#supabase-email"),
   syncPasswordInput: document.querySelector("#supabase-password"),
+  syncNewPasswordInput: document.querySelector("#supabase-new-password"),
+  syncNewPasswordConfirmInput: document.querySelector("#supabase-new-password-confirm"),
   syncConnectButton: document.querySelector("#sync-connect-button"),
   syncRegisterButton: document.querySelector("#sync-register-button"),
   syncPullButton: document.querySelector("#sync-pull-button"),
   syncPushButton: document.querySelector("#sync-push-button"),
   syncSignoutButton: document.querySelector("#sync-signout-button"),
+  syncResetPasswordButton: document.querySelector("#sync-reset-password-button"),
+  syncUpdatePasswordButton: document.querySelector("#sync-update-password-button"),
   syncStatus: document.querySelector("#sync-status"),
   syncNote: document.querySelector("#sync-note"),
 };
@@ -64,6 +69,7 @@ const state = {
     lastMessageIsError: false,
     statusMessage: "当前是纯本地模式。",
     noteMessage: "填好项目配置后，可以直接注册账号并开始多设备同步。",
+    recoveryMode: false,
     unsubscribeAuth: null,
   },
 };
@@ -92,6 +98,12 @@ function init() {
   elements.syncRegisterButton.addEventListener("click", () => {
     void handleSyncRegister();
   });
+  elements.syncResetPasswordButton.addEventListener("click", () => {
+    void handlePasswordResetRequest();
+  });
+  elements.syncUpdatePasswordButton.addEventListener("click", () => {
+    void handlePasswordUpdate();
+  });
   elements.syncPullButton.addEventListener("click", () => {
     void pullRemoteSnapshot({ forceApply: true, source: "手动拉取" });
   });
@@ -101,6 +113,9 @@ function init() {
   elements.syncSignoutButton.addEventListener("click", () => {
     void signOutSync();
   });
+  elements.syncUrlInput.addEventListener("input", renderSyncState);
+  elements.syncAnonKeyInput.addEventListener("input", renderSyncState);
+  elements.syncEmailInput.addEventListener("input", renderSyncState);
 
   window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   window.addEventListener("appinstalled", handleAppInstalled);
@@ -235,6 +250,94 @@ async function handleSyncConnect(event) {
 
 async function handleSyncRegister() {
   await authenticateSync("sign-up");
+}
+
+async function handlePasswordResetRequest() {
+  const config = readSyncConfigFromInputs();
+
+  if (!config.supabaseUrl || !config.supabaseAnonKey || !config.email) {
+    setSyncMessages("发送重置邮件前，请至少填写 URL、Anon Key 和同步邮箱。", true);
+    return;
+  }
+
+  if (!window.supabase?.createClient) {
+    setSyncMessages("同步库未加载成功，无法发送重置邮件。", true);
+    return;
+  }
+
+  state.sync.config = config;
+  persistSyncConfig();
+  hydrateSyncInputs();
+
+  try {
+    setSyncBusy(true, "正在发送重置邮件...");
+    const client = createSupabaseClient(config);
+    const { error } = await client.auth.resetPasswordForEmail(config.email, {
+      redirectTo: getAuthRedirectUrl(),
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    setSyncMessages(
+      "重置邮件已发送，请在邮箱里打开链接后回到本页设置新密码。",
+      false,
+      "邮件里的链接会直接回到当前页面，并自动进入密码重置模式。",
+    );
+  } catch (error) {
+    setSyncMessages(readErrorMessage(error, "发送重置邮件失败，请检查邮箱和 Supabase 配置。"), true);
+  } finally {
+    setSyncBusy(false);
+  }
+}
+
+async function handlePasswordUpdate() {
+  const nextPassword = elements.syncNewPasswordInput.value;
+  const confirmPassword = elements.syncNewPasswordConfirmInput.value;
+
+  if (!nextPassword || !confirmPassword) {
+    setSyncMessages("请输入新密码并完成确认。", true);
+    return;
+  }
+
+  if (nextPassword.length < 6) {
+    setSyncMessages("新密码至少需要 6 位。", true);
+    return;
+  }
+
+  if (nextPassword !== confirmPassword) {
+    setSyncMessages("两次输入的新密码不一致。", true);
+    return;
+  }
+
+  if (!state.sync.client || !state.sync.user) {
+    setSyncMessages("请先登录，或从重置邮件跳回本页后再更新密码。", true);
+    return;
+  }
+
+  try {
+    setSyncBusy(true, state.sync.recoveryMode ? "正在设置新密码..." : "正在更新密码...");
+    const { error } = await state.sync.client.auth.updateUser({
+      password: nextPassword,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    clearPasswordUpdateInputs();
+    state.sync.recoveryMode = false;
+    setSyncMessages(
+      "密码已更新。",
+      false,
+      "下次登录请使用新密码；当前设备上的会话仍然保持有效。",
+    );
+  } catch (error) {
+    setSyncMessages(readErrorMessage(error, "更新密码失败，请稍后重试。"), true);
+  } finally {
+    setSyncBusy(false);
+  }
 }
 
 async function authenticateSync(mode) {
@@ -667,11 +770,16 @@ function renderChart(records) {
 }
 
 function renderSyncState() {
-  const configReady = isSyncConfigReady(state.sync.config);
+  const projectReady = isSyncProjectConfigReady(state.sync.config);
+  const emailReady = Boolean(elements.syncEmailInput.value.trim() || state.sync.config.email);
   const loggedIn = Boolean(state.sync.user);
 
   elements.syncConnectButton.disabled = state.sync.busy || !window.supabase?.createClient;
   elements.syncRegisterButton.disabled = state.sync.busy || !window.supabase?.createClient;
+  elements.syncResetPasswordButton.disabled =
+    state.sync.busy || !window.supabase?.createClient || !projectReady;
+  elements.syncUpdatePasswordButton.disabled =
+    state.sync.busy || !(loggedIn || state.sync.recoveryMode);
   elements.syncPullButton.disabled = state.sync.busy || !loggedIn;
   elements.syncPushButton.disabled = state.sync.busy || !loggedIn;
   elements.syncSignoutButton.disabled = state.sync.busy || !loggedIn;
@@ -694,6 +802,13 @@ function renderSyncState() {
     return;
   }
 
+  if (state.sync.recoveryMode) {
+    elements.syncStatus.textContent = state.sync.statusMessage || "已进入密码重置模式。";
+    elements.syncNote.textContent =
+      state.sync.noteMessage || "请输入新密码并点“更新密码”；不需要重新登录。";
+    return;
+  }
+
   if (loggedIn) {
     const email = state.sync.user.email ?? state.sync.config.email;
     const syncedAt = state.meta.lastSuccessfulSyncAt
@@ -706,9 +821,15 @@ function renderSyncState() {
     return;
   }
 
-  if (configReady) {
+  if (projectReady && emailReady) {
     elements.syncStatus.textContent = "已保存 Supabase 配置，等待登录。";
-    elements.syncNote.textContent = "如果还没有账号，直接点“注册并同步”；密码不会单独保存在浏览器。";
+    elements.syncNote.textContent = "如果忘记密码，可以先发重置邮件；密码不会单独保存在浏览器。";
+    return;
+  }
+
+  if (projectReady) {
+    elements.syncStatus.textContent = "同步项目已就绪。";
+    elements.syncNote.textContent = "填写邮箱和密码即可登录；如果你复用了这个项目，请按需改成自己的 Supabase 配置。";
     return;
   }
 
@@ -779,7 +900,7 @@ function scheduleAutoSync() {
 }
 
 async function restoreSyncSession() {
-  if (!isSyncConfigReady(state.sync.config) || !window.supabase?.createClient) {
+  if (!isSyncProjectConfigReady(state.sync.config) || !window.supabase?.createClient) {
     renderSyncState();
     return;
   }
@@ -793,8 +914,13 @@ async function restoreSyncSession() {
     }
 
     state.sync.user = data.session?.user ?? null;
+    syncEmailFromUser(state.sync.user);
 
     if (state.sync.user) {
+      if (state.sync.recoveryMode || hasRecoveryHash()) {
+        enterRecoveryMode("已验证重置链接。");
+        return;
+      }
       setSyncMessages(`已恢复 ${state.sync.user.email ?? "当前账号"} 的登录状态。`);
     }
   } catch (error) {
@@ -833,8 +959,25 @@ function createSupabaseClient(config) {
   client._leanJournalConfig = { ...config };
   const { data } = client.auth.onAuthStateChange((event, session) => {
     state.sync.user = session?.user ?? null;
+    syncEmailFromUser(state.sync.user);
+
+    if (event === "PASSWORD_RECOVERY") {
+      enterRecoveryMode("已进入密码重置模式。");
+      return;
+    }
+
+    if (event === "USER_UPDATED") {
+      state.sync.recoveryMode = false;
+      setSyncMessages(
+        "密码已更新。",
+        false,
+        "下次登录请使用新密码；当前设备上的会话仍然保持有效。",
+      );
+      return;
+    }
 
     if (event === "SIGNED_OUT") {
+      state.sync.recoveryMode = false;
       state.sync.statusMessage = "已退出 Supabase 同步。";
     }
 
@@ -962,7 +1105,9 @@ async function signOutSync() {
     }
 
     state.sync.user = null;
+    state.sync.recoveryMode = false;
     state.sync.statusMessage = "已退出 Supabase 同步。";
+    clearPasswordUpdateInputs();
   } catch (error) {
     setSyncMessages(readErrorMessage(error, "退出同步失败。"), true);
   } finally {
@@ -1040,8 +1185,8 @@ function hasLocalSnapshot() {
   return state.records.length > 0 || state.settings.heightCm !== null || state.settings.targetWeight !== null;
 }
 
-function isSyncConfigReady(config) {
-  return Boolean(config.supabaseUrl && config.supabaseAnonKey && config.email);
+function isSyncProjectConfigReady(config) {
+  return Boolean(config.supabaseUrl && config.supabaseAnonKey);
 }
 
 function setSyncBusy(isBusy, statusMessage = state.sync.statusMessage) {
@@ -1054,15 +1199,61 @@ function setSyncBusy(isBusy, statusMessage = state.sync.statusMessage) {
   renderSyncState();
 }
 
-function setSyncMessages(statusMessage, isError = false) {
+function setSyncMessages(statusMessage, isError = false, noteMessage = null) {
   state.sync.statusMessage = statusMessage;
   state.sync.lastMessageIsError = isError;
-  state.sync.noteMessage = isError
-    ? "检查 Supabase 表、RLS 策略、Anon Key 以及登录账号后重试。"
-    : state.sync.user
-      ? `上次同步 ${state.meta.lastSuccessfulSyncAt ? formatDateTime(state.meta.lastSuccessfulSyncAt) : "刚刚"}`
-      : "默认仍可离线、本地单独使用。";
+  state.sync.noteMessage =
+    noteMessage ??
+    (isError
+      ? "检查 Supabase 表、RLS 策略、Anon Key 以及登录账号后重试。"
+      : state.sync.recoveryMode
+        ? "请输入新密码并点“更新密码”；不需要重新登录。"
+        : state.sync.user
+          ? `上次同步 ${state.meta.lastSuccessfulSyncAt ? formatDateTime(state.meta.lastSuccessfulSyncAt) : "刚刚"}`
+          : "默认仍可离线、本地单独使用。");
   renderSyncState();
+}
+
+function enterRecoveryMode(statusMessage = "已进入密码重置模式。") {
+  state.sync.recoveryMode = true;
+  setSyncMessages(
+    statusMessage,
+    false,
+    "请输入新密码并点“更新密码”；如果你是从邮件跳回本页，不需要重新登录。",
+  );
+}
+
+function syncEmailFromUser(user) {
+  if (!user?.email || user.email === state.sync.config.email) {
+    return;
+  }
+
+  state.sync.config = {
+    ...state.sync.config,
+    email: user.email,
+  };
+  persistSyncConfig();
+  hydrateSyncInputs();
+}
+
+function clearPasswordUpdateInputs() {
+  elements.syncNewPasswordInput.value = "";
+  elements.syncNewPasswordConfirmInput.value = "";
+}
+
+function getAuthRedirectUrl() {
+  const url = new URL(window.location.href);
+  return `${url.origin}${url.pathname}`;
+}
+
+function hasRecoveryHash() {
+  const hash = window.location.hash.replace(/^#/, "");
+  if (!hash) {
+    return false;
+  }
+
+  const params = new URLSearchParams(hash);
+  return params.get("type") === "recovery";
 }
 
 function setHint(message, isError = false) {

@@ -253,6 +253,42 @@
                 </button>
               </div>
 
+              <div class="settings-grid sync-grid">
+                <div class="field">
+                  <label for="supabase-new-password">新密码</label>
+                  <input
+                    id="supabase-new-password"
+                    name="supabaseNewPassword"
+                    type="password"
+                    placeholder="登录后可修改，或在重置邮件回跳后设置"
+                    autocomplete="new-password"
+                  />
+                </div>
+                <div class="field">
+                  <label for="supabase-new-password-confirm">确认新密码</label>
+                  <input
+                    id="supabase-new-password-confirm"
+                    name="supabaseNewPasswordConfirm"
+                    type="password"
+                    placeholder="再次输入新密码"
+                    autocomplete="new-password"
+                  />
+                </div>
+              </div>
+
+              <div class="sync-account-actions">
+                <button id="sync-reset-password-button" type="button" class="secondary-button">
+                  发送重置邮件
+                </button>
+                <button id="sync-update-password-button" type="button" class="secondary-button">
+                  更新密码
+                </button>
+              </div>
+
+              <p class="sync-help">
+                忘记密码时，先填邮箱再发邮件；收到 Supabase 邮件后回到本页，就能直接设置新密码。
+              </p>
+
               <div class="sync-meta">
                 <p id="sync-status" class="sync-status">当前是纯本地模式。</p>
                 <p id="sync-note" class="sync-note">

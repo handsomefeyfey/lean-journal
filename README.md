@@ -52,6 +52,17 @@ python3 -m http.server 4173
 - 如果还没有账号，点“注册并同步”
 - 如果已经有账号，点“登录并同步”
 
+### 6. 忘记密码或改密码
+
+- 忘记密码时，先填同步邮箱，再点“发送重置邮件”
+- 打开邮件里的链接后，会自动回到当前页面，并进入“更新密码”流程
+- 已登录时，也可以直接输入新密码和确认密码，然后点“更新密码”
+
+### 7. 当前部署说明
+
+- 这个仓库当前已默认预配到 `kovicgsdezkylimczijg` 这个 Supabase 项目，所以公开站点打开后会自动带上 `Project URL` 和 `Publishable Key`
+- 如果你以后把项目迁到新的 Supabase，请同步更新 [app.js](/Users/didiao666/Documents/Codex/2026-04-28/hi/app.js) 里的 `DEFAULT_SYNC_CONFIG`
+
 ## 同步策略
 
 - 应用把整份数据快照同步到云端，而不是逐条同步。
