@@ -3,6 +3,11 @@ const SETTINGS_KEY = "lean-journal-settings-v1";
 const META_KEY = "lean-journal-meta-v1";
 const SYNC_CONFIG_KEY = "lean-journal-sync-config-v1";
 const SYNC_TABLE = "weight_journal_snapshots";
+const DEFAULT_SYNC_CONFIG = Object.freeze({
+  supabaseUrl: "",
+  supabaseAnonKey: "",
+  email: "",
+});
 
 const elements = {
   form: document.querySelector("#weight-form"),
@@ -37,6 +42,7 @@ const elements = {
   syncEmailInput: document.querySelector("#supabase-email"),
   syncPasswordInput: document.querySelector("#supabase-password"),
   syncConnectButton: document.querySelector("#sync-connect-button"),
+  syncRegisterButton: document.querySelector("#sync-register-button"),
   syncPullButton: document.querySelector("#sync-pull-button"),
   syncPushButton: document.querySelector("#sync-push-button"),
   syncSignoutButton: document.querySelector("#sync-signout-button"),
@@ -57,7 +63,7 @@ const state = {
     busy: false,
     lastMessageIsError: false,
     statusMessage: "当前是纯本地模式。",
-    noteMessage: "首次使用前，需要先按说明在 Supabase 中创建表和权限策略。",
+    noteMessage: "填好项目配置后，可以直接注册账号并开始多设备同步。",
     unsubscribeAuth: null,
   },
 };
@@ -83,6 +89,9 @@ function init() {
   elements.targetWeightInput.addEventListener("change", handleSettingsChange);
   elements.installButton.addEventListener("click", handleInstallClick);
   elements.syncForm.addEventListener("submit", handleSyncConnect);
+  elements.syncRegisterButton.addEventListener("click", () => {
+    void handleSyncRegister();
+  });
   elements.syncPullButton.addEventListener("click", () => {
     void pullRemoteSnapshot({ forceApply: true, source: "手动拉取" });
   });
@@ -221,13 +230,17 @@ function handleAppInstalled() {
 
 async function handleSyncConnect(event) {
   event.preventDefault();
+  await authenticateSync("sign-in");
+}
 
-  const config = {
-    supabaseUrl: elements.syncUrlInput.value.trim(),
-    supabaseAnonKey: elements.syncAnonKeyInput.value.trim(),
-    email: elements.syncEmailInput.value.trim(),
-  };
+async function handleSyncRegister() {
+  await authenticateSync("sign-up");
+}
+
+async function authenticateSync(mode) {
+  const config = readSyncConfigFromInputs();
   const password = elements.syncPasswordInput.value;
+  const isSignUp = mode === "sign-up";
 
   if (!config.supabaseUrl || !config.supabaseAnonKey || !config.email || !password) {
     setSyncMessages("请完整填写 URL、Anon Key、邮箱和密码。", true);
@@ -244,22 +257,47 @@ async function handleSyncConnect(event) {
   hydrateSyncInputs();
 
   try {
-    setSyncBusy(true, "正在登录 Supabase 并同步...");
+    setSyncBusy(true, isSignUp ? "正在注册 Supabase 账号并同步..." : "正在登录 Supabase 并同步...");
     const client = createSupabaseClient(config);
-    const { error } = await client.auth.signInWithPassword({
-      email: config.email,
-      password,
-    });
+    const authResult = isSignUp
+      ? await client.auth.signUp({
+          email: config.email,
+          password,
+          options: {
+            data: {
+              app: "lean-journal",
+            },
+          },
+        })
+      : await client.auth.signInWithPassword({
+          email: config.email,
+          password,
+        });
+    const { data, error } = authResult;
 
     if (error) {
       throw error;
     }
 
     elements.syncPasswordInput.value = "";
+
+    if (isSignUp && !data.session) {
+      setSyncMessages("注册请求已提交。请先完成邮箱确认；如果这个邮箱已注册，直接点“登录并同步”。");
+      return;
+    }
+
     await restoreSyncSession();
     await resolveRemoteAndLocalOnConnect();
   } catch (error) {
-    setSyncMessages(readErrorMessage(error, "登录失败，请检查 Supabase 配置和账号密码。"), true);
+    setSyncMessages(
+      readErrorMessage(
+        error,
+        isSignUp
+          ? "注册失败，请检查 Supabase 配置、邮箱格式和密码强度。"
+          : "登录失败，请检查 Supabase 配置和账号密码。",
+      ),
+      true,
+    );
   } finally {
     setSyncBusy(false);
   }
@@ -633,6 +671,7 @@ function renderSyncState() {
   const loggedIn = Boolean(state.sync.user);
 
   elements.syncConnectButton.disabled = state.sync.busy || !window.supabase?.createClient;
+  elements.syncRegisterButton.disabled = state.sync.busy || !window.supabase?.createClient;
   elements.syncPullButton.disabled = state.sync.busy || !loggedIn;
   elements.syncPushButton.disabled = state.sync.busy || !loggedIn;
   elements.syncSignoutButton.disabled = state.sync.busy || !loggedIn;
@@ -669,12 +708,12 @@ function renderSyncState() {
 
   if (configReady) {
     elements.syncStatus.textContent = "已保存 Supabase 配置，等待登录。";
-    elements.syncNote.textContent = "Anon Key 和 URL 会保存在当前浏览器；密码不会单独保存。";
+    elements.syncNote.textContent = "如果还没有账号，直接点“注册并同步”；密码不会单独保存在浏览器。";
     return;
   }
 
   elements.syncStatus.textContent = "当前是纯本地模式。";
-  elements.syncNote.textContent = "首次使用前，需要先按说明在 Supabase 中创建表和权限策略。";
+  elements.syncNote.textContent = "填好项目配置后，可以直接注册账号并开始多设备同步。";
 }
 
 function hydrateSettingsInputs() {
@@ -687,6 +726,14 @@ function hydrateSyncInputs() {
   elements.syncUrlInput.value = state.sync.config.supabaseUrl ?? "";
   elements.syncAnonKeyInput.value = state.sync.config.supabaseAnonKey ?? "";
   elements.syncEmailInput.value = state.sync.config.email ?? "";
+}
+
+function readSyncConfigFromInputs() {
+  return {
+    supabaseUrl: elements.syncUrlInput.value.trim(),
+    supabaseAnonKey: elements.syncAnonKeyInput.value.trim(),
+    email: elements.syncEmailInput.value.trim(),
+  };
 }
 
 function updateInstallUI() {
@@ -1113,25 +1160,21 @@ function loadSyncConfig() {
   try {
     const raw = window.localStorage.getItem(SYNC_CONFIG_KEY);
     if (!raw) {
-      return {
-        supabaseUrl: "",
-        supabaseAnonKey: "",
-        email: "",
-      };
+      return { ...DEFAULT_SYNC_CONFIG };
     }
 
     const parsed = JSON.parse(raw);
     return {
-      supabaseUrl: typeof parsed?.supabaseUrl === "string" ? parsed.supabaseUrl : "",
-      supabaseAnonKey: typeof parsed?.supabaseAnonKey === "string" ? parsed.supabaseAnonKey : "",
-      email: typeof parsed?.email === "string" ? parsed.email : "",
+      supabaseUrl:
+        typeof parsed?.supabaseUrl === "string" ? parsed.supabaseUrl : DEFAULT_SYNC_CONFIG.supabaseUrl,
+      supabaseAnonKey:
+        typeof parsed?.supabaseAnonKey === "string"
+          ? parsed.supabaseAnonKey
+          : DEFAULT_SYNC_CONFIG.supabaseAnonKey,
+      email: typeof parsed?.email === "string" ? parsed.email : DEFAULT_SYNC_CONFIG.email,
     };
   } catch {
-    return {
-      supabaseUrl: "",
-      supabaseAnonKey: "",
-      email: "",
-    };
+    return { ...DEFAULT_SYNC_CONFIG };
   }
 }
 

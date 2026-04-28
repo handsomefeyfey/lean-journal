@@ -199,7 +199,7 @@
                     id="supabase-url"
                     name="supabaseUrl"
                     type="url"
-                    placeholder="https://xxxx.supabase.co"
+                    placeholder="项目地址，通常只需填写一次"
                     autocomplete="url"
                   />
                 </div>
@@ -209,27 +209,27 @@
                     id="supabase-anon-key"
                     name="supabaseAnonKey"
                     type="password"
-                    placeholder="从 Supabase 项目设置复制"
+                    placeholder="浏览器可公开使用的项目公钥"
                     autocomplete="off"
                   />
                 </div>
                 <div class="field">
-                  <label for="supabase-email">登录邮箱</label>
+                  <label for="supabase-email">同步邮箱</label>
                   <input
                     id="supabase-email"
                     name="supabaseEmail"
                     type="email"
-                    placeholder="你在 Supabase Auth 里使用的邮箱"
+                    placeholder="注册或登录时使用的邮箱"
                     autocomplete="username"
                   />
                 </div>
                 <div class="field">
-                  <label for="supabase-password">登录密码</label>
+                  <label for="supabase-password">同步密码</label>
                   <input
                     id="supabase-password"
                     name="supabasePassword"
                     type="password"
-                    placeholder="只用于本次登录，不会单独保存"
+                    placeholder="只用于本次登录或注册，不会单独保存"
                     autocomplete="current-password"
                   />
                 </div>
@@ -238,6 +238,9 @@
               <div class="sync-actions">
                 <button id="sync-connect-button" type="submit" class="primary-button">
                   登录并同步
+                </button>
+                <button id="sync-register-button" type="button" class="secondary-button">
+                  注册并同步
                 </button>
                 <button id="sync-pull-button" type="button" class="secondary-button">
                   拉取云端
@@ -253,7 +256,7 @@
               <div class="sync-meta">
                 <p id="sync-status" class="sync-status">当前是纯本地模式。</p>
                 <p id="sync-note" class="sync-note">
-                  首次使用前，需要先按说明在 Supabase 中创建表和权限策略。
+                  填好项目配置后，可以直接注册账号并开始多设备同步。
                 </p>
               </div>
             </form>

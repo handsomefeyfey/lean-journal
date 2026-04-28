@@ -38,23 +38,19 @@ python3 -m http.server 4173
 
 在 `SQL Editor` 中执行 [supabase-setup.sql](/Users/didiao666/Documents/Codex/2026-04-28/hi/supabase-setup.sql)。
 
-### 4. 创建登录账号
-
-可选做法：
-
-- 在 Supabase 的 `Authentication -> Users` 里手动创建一个用户
-- 或者你后续自己扩展成注册按钮
-
-### 5. 在应用里填同步配置
+### 4. 在应用里填同步配置
 
 在页面的“多设备同步”区域填写：
 
 - `Supabase URL`
 - `Anon Key`
-- 登录邮箱
-- 登录密码
+- 同步邮箱
+- 同步密码
 
-然后点“登录并同步”。
+### 5. 直接注册或登录
+
+- 如果还没有账号，点“注册并同步”
+- 如果已经有账号，点“登录并同步”
 
 ## 同步策略
 
